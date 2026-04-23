@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexLink Cloud | Dual Theme Vault</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1200.0.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #050505; --text: #e2e8f0; --sidebar: rgba(15, 23, 42, 0.9); --glass: rgba(30, 41, 59, 0.4); --border: rgba(255, 255, 255, 0.1); }
+        .light-mode { --bg: #f0f2f5; --text: #1e293b; --sidebar: rgba(255, 255, 255, 0.8); --glass: rgba(255, 255, 255, 0.7); --border: rgba(0, 0, 0, 0.05); }
+        
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text); overflow: hidden; transition: all 0.4s ease; }
+        .sidebar { background: var(--sidebar); backdrop-filter: blur(20px); border-right: 1px solid var(--border); }
+        .main-content { height: 100vh; overflow-y: auto; transition: background 0.4s ease; }
+        .glass-card { background: var(--glass); backdrop-filter: blur(10px); border: 1px solid var(--border); transition: 0.3s; }
+        .active-link { background: rgba(20, 184, 166, 0.15); color: #14b8a6; border-right: 3px solid #14b8a6; }
+        .light-mode .main-content { background: #ffffff; }
+    </style>
+</head>
+<body class="flex">
+
+    <aside class="sidebar w-64 h-screen flex flex-col p-6 hidden md:flex">
+        <div class="flex items-center justify-between mb-10">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-teal-500/20">
+                    <i data-lucide="cloud" class="text-white"></i>
+                </div>
+                <h1 class="text-xl font-bold tracking-tight">NexLink</h1>
+            </div>
+        </div>
+
+        <nav class="space-y-2 flex-1">
+            <button onclick="switchCategory('all')" id="btn-all" class="w-full flex items-center gap-3 p-3 rounded-lg active-link">
+                <i data-lucide="layout-grid" class="w-5 h-5"></i> All Files
+            </button>
+            <button onclick="switchCategory('images')" id="btn-images" class="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-black/5">
+                <i data-lucide="image" class="w-5 h-5"></i> Photos
+            </button>
+            <button onclick="switchCategory('videos')" id="btn-videos" class="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-black/5">
+                <i data-lucide="play-circle" class="w-5 h-5"></i> Videos
+            </button>
+            <button onclick="switchCategory('contacts')" id="btn-contacts" class="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-black/5">
+                <i data-lucide="users" class="w-5 h-5"></i> Contacts
+            </button>
+        </nav>
+
+        <button onclick="toggleTheme()" class="mt-auto p-3 glass-card rounded-xl flex items-center justify-center gap-2 font-bold">
+            <i data-lucide="sun" id="theme-icon" class="w-5 h-5"></i> <span id="theme-text">Light Mode</span>
+        </button>
+    </aside>
+
+    <main class="main-content flex-1 flex flex-col">
+        <header class="p-6 flex justify-between items-center border-b border-white/5 shadow-sm">
+            <h2 id="category-title" class="text-2xl font-bold">Library</h2>
+            <div class="flex gap-4">
+                <button onclick="document.getElementById('master-input').click()" class="bg-teal-500 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-teal-500/30">
+                    <i data-lucide="upload-cloud"></i> BACKUP
+                </button>
+                <input type="file" id="master-input" hidden multiple onchange="processUpload()">
+            </div>
+        </header>
+
+        <section class="p-8">
+            <div id="display-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6"></div>
+            
+            <div id="contacts-ui" class="hidden max-w-2xl mx-auto text-center">
+                <div class="glass-card p-10 rounded-3xl mb-6">
+                    <i data-lucide="contact-2" class="mx-auto w-12 h-12 text-teal-500 mb-4"></i>
+                    <h3 class="text-xl font-bold mb-4">Import .vcf Contacts</h3>
+                    <button onclick="document.getElementById('vcf-input').click()" class="bg-teal-500 text-white px-8 py-3 rounded-xl font-bold">Upload VCF File</button>
+                    <input type="file" id="vcf-input" hidden accept=".vcf" onchange="importVCF(event)">
+                </div>
+                <div id="contacts-list" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-left"></div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const B2_CONFIG = {
+            accessKeyId: '32e9b3a7ca93',
+            secretAccessKey: '00564eeee8999ee5dedc3c3fd30472b999a087582f',
+            endpoint: 'https://s3.us-east-005.backblazeb2.com',
+            bucketName: 'nexlink-vault-',
+            region: 'us-east-005'
+        };
+
+        const s3 = new AWS.S3({ accessKeyId: B2_CONFIG.accessKeyId, secretAccessKey: B2_CONFIG.secretAccessKey, endpoint: B2_CONFIG.endpoint, s3ForcePathStyle: true, signatureVersion: 'v4' });
+        let vault = []; let contactsList = [];
+        lucide.createIcons();
+
+        function toggleTheme() {
+            const body = document.body;
+            const icon = document.getElementById('theme-icon');
+            const text = document.getElementById('theme-text');
+            body.classList.toggle('light-mode');
+            
+            if(body.classList.contains('light-mode')) {
+                icon.setAttribute('data-lucide', 'moon');
+                text.innerText = "Dark Mode";
+            } else {
+                icon.setAttribute('data-lucide', 'sun');
+                text.innerText = "Light Mode";
+            }
+            lucide.createIcons();
+        }
+
+        function switchCategory(cat) {
+            document.querySelectorAll('aside nav button').forEach(b => b.classList.remove('active-link'));
+            document.getElementById('btn-' + cat).classList.add('active-link');
+            document.getElementById('category-title').innerText = cat.charAt(0).toUpperCase() + cat.slice(1);
+            document.getElementById('display-grid').classList.toggle('hidden', cat === 'contacts');
+            document.getElementById('contacts-ui').classList.toggle('hidden', cat !== 'contacts');
+            if (cat !== 'contacts') renderItems(cat);
+        }
+
+        async function processUpload() {
+            const files = document.getElementById('master-input').files;
+            for (let file of files) {
+                let type = file.type.startsWith('image/') ? 'images' : (file.type.startsWith('video/') ? 'videos' : 'files');
+                const params = { Bucket: B2_CONFIG.bucketName, Key: `nexlink/${type}/${Date.now()}-${file.name}`, Body: file, ContentType: file.type };
+                try {
+                    const res = await s3.upload(params).promise();
+                    vault.push({ name: file.name, url: res.Location, type: type });
+                    renderItems();
+                } catch (e) { console.error(e); }
+            }
+        }
+
+        function renderItems(filter = 'all') {
+            const grid = document.getElementById('display-grid'); grid.innerHTML = '';
+            const filtered = vault.filter(i => filter === 'all' || i.type === filter);
+            filtered.forEach(item => {
+                const card = document.createElement('div');
+                card.className = "glass-card p-3 rounded-2xl relative group";
+                card.innerHTML = `
+                    <div class="h-32 bg-slate-200/10 rounded-xl mb-3 flex items-center justify-center overflow-hidden">
+                        ${item.type === 'images' ? `<img src="${item.url}" class="w-full h-full object-cover">` : `<i data-lucide="file" class="opacity-20"></i>`}
+                    </div>
+                    <p class="text-[11px] font-bold truncate">${item.name}</p>
+                `;
+                grid.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        function importVCF(e) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const lines = event.target.result.split('\n');
+                let name = '', phone = '';
+                lines.forEach(line => {
+                    if (line.startsWith('FN:')) name = line.replace('FN:', '').trim();
+                    if (line.startsWith('TEL')) phone = line.split(':')[1]?.trim();
+                    if (name && phone) { contactsList.push({ name, phone }); name = ''; phone = ''; }
+                });
+                renderContacts();
+            };
+            reader.readAsText(e.target.files[0]);
+        }
+
+        function renderContacts() {
+            const list = document.getElementById('contacts-list'); list.innerHTML = '';
+            contactsList.forEach(c => {
+                const div = document.createElement('div');
+                div.className = "glass-card p-4 rounded-2xl flex justify-between";
+                div.innerHTML = `<div><p class="font-bold">${c.name}</p><p class="text-xs opacity-60">${c.phone}</p></div><i data-lucide="phone-call" class="text-teal-500 w-4 h-4"></i>`;
+                list.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+    </script>
+</body>
+</html>
