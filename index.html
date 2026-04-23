@@ -3,46 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NexLink | Cloudflare R2</title>
+    <title>NexLink | R2 Cloud Vault</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1200.0.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         :root { --bg: #050505; --text: #e2e8f0; --glass: rgba(30, 41, 59, 0.4); --border: rgba(255, 255, 255, 0.1); }
-        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text); min-height: 100vh; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
         .glass-card { background: var(--glass); backdrop-filter: blur(10px); border: 1px solid var(--border); transition: 0.3s; }
-        .upload-btn { background: linear-gradient(135deg, #f36422, #ff8c00); }
+        .btn-gradient { background: linear-gradient(135deg, #f36422, #ff8c00); transition: 0.3s; }
+        .btn-gradient:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(243, 100, 34, 0.2); }
     </style>
 </head>
-<body class="p-6">
+<body class="p-6 md:p-12">
 
     <div class="max-w-6xl mx-auto">
-        <header class="flex justify-between items-center mb-10 border-b border-white/5 pb-6">
-            <div class="flex items-center gap-3">
-                <div class="w-12 h-12 upload-btn rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/20">
-                    <i data-lucide="zap" class="text-white"></i>
+        <header class="flex justify-between items-center mb-12 border-b border-white/5 pb-8">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 btn-gradient rounded-2xl flex items-center justify-center shadow-lg">
+                    <i data-lucide="cloud-lightning" class="text-white w-8 h-8"></i>
                 </div>
-                <h1 class="text-2xl font-bold tracking-tighter">NexLink <span class="text-orange-500 font-light italic text-sm">R2 Edition</span></h1>
+                <div>
+                    <h1 class="text-3xl font-black tracking-tighter">NexLink</h1>
+                    <p class="text-orange-500 text-xs font-mono uppercase tracking-widest">R2 Object Storage</p>
+                </div>
             </div>
-            <button onclick="document.getElementById('file-input').click()" class="upload-btn text-white px-8 py-3 rounded-2xl font-bold flex items-center gap-2 hover:scale-105 transition-all shadow-lg">
-                <i data-lucide="upload-cloud"></i> BACKUP FILE
-            </button>
-            <input type="file" id="file-input" hidden multiple onchange="uploadToR2()">
+            
+            <div class="flex gap-4">
+                <button onclick="document.getElementById('file-input').click()" class="btn-gradient text-white px-8 py-3 rounded-2xl font-bold flex items-center gap-2">
+                    <i data-lucide="plus-circle"></i> BACKUP FILE
+                </button>
+                <input type="file" id="file-input" hidden multiple onchange="uploadToR2()">
+            </div>
         </header>
 
-        <div id="grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 text-sm">
+            <div class="glass-card p-4 rounded-2xl border-l-4 border-orange-500">
+                <p class="opacity-50">Status</p>
+                <p class="font-bold text-green-400">Connected to R2</p>
+            </div>
+            <div class="glass-card p-4 rounded-2xl border-l-4 border-blue-500">
+                <p class="opacity-50">Bucket Name</p>
+                <p class="font-bold">Nexline</p>
+            </div>
+            <div class="glass-card p-4 rounded-2xl border-l-4 border-purple-500">
+                <p class="opacity-50">Egress Fees</p>
+                <p class="font-bold">$0.00 (Zero Fees)</p>
+            </div>
+        </div>
+
+        <div id="grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+            </div>
     </div>
 
     <script>
+        // البيانات الخاصة بك من الصور التي أرسلتها
         const R2_CONFIG = {
             accessKeyId: '7b8b9abf52cbc0ee608c45cc7493ea88',
             secretAccessKey: 'fad246eb50f4e0da3b05c55da08e6cda570eea7185a051c962d3a4e0762d6d0a',
             endpoint: 'https://24d79d5b07f5051f2f201553fcbebbce.r2.cloudflarestorage.com',
-            bucketName: 'Nexline', // الاسم اللي إنت اخترته
+            bucketName: 'Nexline',
             region: 'auto'
         };
 
+        // تهيئة اتصال S3
         const s3 = new AWS.S3({
             accessKeyId: R2_CONFIG.accessKeyId,
             secretAccessKey: R2_CONFIG.secretAccessKey,
@@ -60,9 +85,10 @@
             if (!files.length) return;
 
             for (let file of files) {
-                const key = `uploads/${Date.now()}-${file.name}`;
+                const key = `vault/${Date.now()}-${file.name}`;
                 try {
-                    console.log("Starting Upload to R2 Bucket: Nexline...");
+                    console.log("جارِ محاولة الرفع...");
+                    
                     await s3.putObject({
                         Bucket: R2_CONFIG.bucketName,
                         Key: key,
@@ -70,6 +96,9 @@
                         ContentType: file.type
                     }).promise();
 
+                    console.log("تم الرفع بنجاح!");
+
+                    // توليد رابط معاينة
                     const url = s3.getSignedUrl('getObject', {
                         Bucket: R2_CONFIG.bucketName,
                         Key: key,
@@ -79,8 +108,8 @@
                     filesList.push({ name: file.name, url: url, type: file.type });
                     render();
                 } catch (err) {
-                    console.error("Upload Error:", err);
-                    alert("فشل الرفع: " + err.message);
+                    console.error("تفاصيل الخطأ:", err);
+                    alert("عذراً، فشل الرفع. تأكد من تفعيل الـ CORS في Cloudflare. الخطأ: " + err.message);
                 }
             }
         }
@@ -91,12 +120,12 @@
             filesList.forEach(f => {
                 const isImg = f.type.startsWith('image/');
                 const card = document.createElement('div');
-                card.className = "glass-card p-3 rounded-3xl animate-in fade-in zoom-in duration-300";
+                card.className = "glass-card p-3 rounded-3xl animate-in fade-in zoom-in duration-300 hover:border-orange-500/50 transition-all cursor-pointer";
                 card.innerHTML = `
                     <div class="h-32 bg-white/5 rounded-2xl mb-3 flex items-center justify-center overflow-hidden">
                         ${isImg ? `<img src="${f.url}" class="w-full h-full object-cover">` : `<i data-lucide="file-text" class="text-orange-500 w-10 h-10 opacity-50"></i>`}
                     </div>
-                    <p class="text-[10px] font-medium truncate text-center opacity-60">${f.name}</p>
+                    <p class="text-[10px] font-medium truncate text-center opacity-60 px-2">${f.name}</p>
                 `;
                 grid.appendChild(card);
             });
